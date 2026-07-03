@@ -1,0 +1,33 @@
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Đảm bảo độ tin cậy phi chức năng: Chờ xác nhận từ các bản sao replica
+      acks: all 
+    consumer:
+      group-id: audit-log-normalization-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+  # Bổ sung cấu hình kết nối tới Elasticsearch endpoint
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Mở khóa endpoint health và metrics để tích hợp Prometheus/Grafana hoặc gọi qua Postman
+        include: "health,metrics"
+  endpoint:
+    health:
+      # Ép Actuator show sạch sẽ trạng thái kết nối chi tiết của Kafka, Elasticsearch, Disk...
+      show-details: always
+
+# Cấu hình log levels để theo dõi pipeline chảy qua hệ thống
+logging:
+  level:
+    com.vdt.auditlog: DEBUG
