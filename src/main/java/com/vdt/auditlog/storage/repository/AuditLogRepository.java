@@ -6,16 +6,16 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Repository
 public interface AuditLogRepository extends ElasticsearchRepository<AuditLogEvent, String> {
 
-    // Tìm kiếm phân trang dựa theo loại hành động và khoảng thời gian (Yêu cầu phi chức năng số 1)
+    // Thay đổi Instant thành LocalDateTime để đồng bộ hoàn toàn với Model AuditLogEvent
     Page<AuditLogEvent> findByActionTypeAndTimestampBetween(
-            String actionType, Instant start, Instant end, Pageable pageable
+            String actionType, LocalDateTime start, LocalDateTime end, Pageable pageable
     );
 
-    // Tìm kiếm lỏng lẻo (Full-text search) trên câu lệnh query hoặc payload
+    // Giữ nguyên - Tìm kiếm lỏng lẻo (Full-text search) trên câu lệnh query
     Page<AuditLogEvent> findByQueryStatementContaining(String query, Pageable pageable);
 }

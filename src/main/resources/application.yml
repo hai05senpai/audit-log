@@ -16,6 +16,22 @@ spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
 
+# ===================================================================
+# CẤU HÌNH LIÊN KẾT ĐẾN CÁC HỆ QUẢN TRỊ CSDL NGUỒN (MỚI BỔ SUNG)
+# ===================================================================
+app:
+  connectors:
+    mysql:
+      host: ${MYSQL_LOG_HOST:localhost}
+      port: ${MYSQL_LOG_PORT:3306}
+      username: ${MYSQL_LOG_USER:root}
+      password: ${MYSQL_LOG_PASSWORD:secret}
+    postgres:
+      host: ${POSTGRES_LOG_HOST:localhost}
+      port: ${POSTGRES_LOG_PORT:5432}
+      username: ${POSTGRES_LOG_USER:postgres}
+      password: ${POSTGRES_LOG_PASSWORD:secret}
+
 management:
   endpoints:
     web:

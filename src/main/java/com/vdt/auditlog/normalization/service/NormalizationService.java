@@ -1,88 +1,120 @@
 package com.vdt.auditlog.normalization.service;
 
-import com.vdt.auditlog.normalization.masking.DataMaskingService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vdt.auditlog.normalization.model.AuditLogEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.HashMap;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class NormalizationService {
 
-    private final DataMaskingService maskingService;
-    
-    // Pattern tìm kiếm nội dung nằm sau cặp "query":"..." trong chuỗi JSON thô
-    private static final Pattern MYSQL_QUERY_PATTERN = Pattern.compile("\"query\"\\s*:\\s*\"(.*?)\"\\s*}\\s*$");
+    private final ObjectMapper objectMapper;
 
     /**
-     * Chuẩn hóa Log thô từ MySQL (Binlog JSON string)
+     * CHUẨN HÓA LOG MYSQL: Phù hợp 100% với cấu trúc JSON phẳng từ LogSimulationRunner
      */
-    public AuditLogEvent normalizeMysqlLog(String rawMessage, String sourceKey) {
-        log.debug("Đang chuẩn hóa log MySQL từ nguồn: {}", sourceKey);
+    public AuditLogEvent normalizeMysqlLog(String sourceOrTopic, String rawMessage) {
+        AuditLogEvent event = new AuditLogEvent();
+        event.setDbType("MYSQL");
+        event.setActor("mysql_binlog_listener");
         
-        // Thực hiện masking câu lệnh/dữ liệu thô trước
-        String maskedMessage = maskingService.maskSensitiveData(rawMessage);
-        
-        Map<String, Object> mockPayload = new HashMap<>();
-        mockPayload.put("raw_data_summary", maskedMessage);
-
-        // GIẢI PHÁP: Trích xuất câu lệnh SQL thực tế ra khỏi JSON thô để Elasticsearch đánh chỉ mục text chuẩn 100%
-        String cleanQueryStatement = maskedMessage;
         try {
-            Matcher matcher = MYSQL_QUERY_PATTERN.matcher(maskedMessage);
-            if (matcher.find()) {
-                String rawQuery = matcher.group(1);
-                // Khử hoàn toàn các ký tự escape dấu nháy \" thành dấy nháy đơn hoặc nháy kép thuần túy
-                cleanQueryStatement = rawQuery.replace("\\\"", "\"");
+            JsonNode rootNode = objectMapper.readTree(rawMessage);
+            
+            // 1. Bóc tách dbSource và Timestamp
+            event.setDbSource(sourceOrTopic); 
+            if (rootNode.has("timestamp")) {
+                String timestampStr = rootNode.get("timestamp").asText();
+                // Parse chuỗi ISO-8601 (từ Instant.toString()) sang LocalDateTime
+                Instant instant = Instant.parse(timestampStr);
+                event.setTimestamp(LocalDateTime.ofInstant(instant, ZoneId.systemDefault()));
+            } else {
+                event.setTimestamp(LocalDateTime.now());
             }
-        } catch (Exception e) {
-            log.warn("Không bóc tách được câu SQL từ log MySQL, fallback về masked message: {}", e.getMessage());
-            cleanQueryStatement = maskedMessage;
-        }
 
-        return AuditLogEvent.builder()
-                .id(UUID.randomUUID().toString())
-                .timestamp(Instant.now().toEpochMilli())
-                .dbSource(sourceKey)
-                .dbType("MYSQL")
-                .actor("mysql_replica_user")
-                .actionType("UPDATE") 
-                // queryStatement bây giờ là text thuần: INSERT INTO users ... VALUES (..., 'user10@viettel.com.vn');
-                .queryStatement(cleanQueryStatement) 
-                .payload(mockPayload)
-                .build();
+            // 2. Bóc tách Action và map sang định dạng
+            if (rootNode.has("action")) {
+                String action = rootNode.get("action").asText().toUpperCase();
+                if (action.matches("INSERT|UPDATE|DELETE")) {
+                    event.setActionType("DML");
+                } else if (action.matches("SELECT")) {
+                    event.setActionType("DQL");
+                } else if (action.matches("ALTER|DROP|CREATE|TRUNCATE")) {
+                    event.setActionType("DDL");
+                } else {
+                    event.setActionType(action);
+                }
+            } else {
+                event.setActionType("UNKNOWN");
+            }
+            
+            // 3. Bóc tách câu lệnh Query thực tế
+            if (rootNode.has("query")) {
+                event.setQueryStatement(rootNode.get("query").asText());
+            } else {
+                event.setQueryStatement("UNKNOWN event captured from binlog");
+            }
+
+            // 4. Lưu vết payload bổ sung thông tin tên table
+            String tableName = rootNode.has("table") ? rootNode.get("table").asText() : "unknown";
+            event.setPayload(Map.of("table_name", tableName, "raw_message", rawMessage));
+
+        } catch (Exception e) {
+            log.error("Loi parse log MySQL: {}", e.getMessage());
+            event.setTimestamp(LocalDateTime.now());
+            event.setDbSource(sourceOrTopic);
+            event.setActionType("UNKNOWN");
+            event.setQueryStatement("UNKNOWN event captured from binlog");
+        }
+        return event;
     }
 
     /**
-     * Chuẩn hóa Log thô từ PostgreSQL (WAL/Logical Replication text string)
+     * CHUẨN HÓA LOG POSTGRESQL: Sửa triệt để lỗi hoán đổi vị trí biến và gán ActionType thích hợp
      */
-    public AuditLogEvent normalizePostgresLog(String rawMessage, String sourceKey) {
-        log.debug("Đang chuẩn hóa log Postgres từ nguồn: {}", sourceKey);
+    public AuditLogEvent normalizePostgresLog(String dbSource, String rawQuery) {
+        AuditLogEvent event = new AuditLogEvent();
+        event.setDbType("POSTGRESQL");
+        event.setActor("postgres_wal_streamer");
+        event.setTimestamp(LocalDateTime.now()); // Sửa thành LocalDateTime.now() thay vì chuỗi Instant
 
-        String maskedMessage = maskingService.maskSensitiveData(rawMessage);
+        event.setDbSource(dbSource);
+        event.setQueryStatement(rawQuery);
+        event.setPayload(Map.of("raw_wal_summary", rawQuery != null ? rawQuery : ""));
         
-        Map<String, Object> mockPayload = new HashMap<>();
-        mockPayload.put("raw_wal_summary", maskedMessage);
+        if (rawQuery == null) {
+            event.setActionType("UNKNOWN");
+            return event;
+        }
 
-        return AuditLogEvent.builder()
-                .id(UUID.randomUUID().toString())
-                .timestamp(Instant.now().toEpochMilli())
-                .dbSource(sourceKey)
-                .dbType("POSTGRESQL")
-                .actor("postgres_replication_client")
-                .actionType("DML") 
-                // Lưu toàn bộ maskedMessage nguyên vẹn vì Postgres bản chất đã là text thuần, không bị bọc JSON
-                .queryStatement(maskedMessage) 
-                .payload(mockPayload)
-                .build();
+        String cleanQuery = rawQuery.trim().toUpperCase();
+        
+        if (cleanQuery.contains("INSERT INTO") || 
+            cleanQuery.contains("UPDATE ") || 
+            cleanQuery.contains("DELETE FROM")) {
+            
+            event.setActionType("DML");
+        } else if (cleanQuery.contains("SELECT ")) {
+            event.setActionType("DQL");
+        } else if (cleanQuery.contains("DROP") || 
+                   cleanQuery.contains("ALTER") || 
+                   cleanQuery.contains("CREATE TABLE")) {
+            
+            event.setActionType("DDL");
+        } else {
+            event.setActionType("OTHER");
+        }
+        
+        return event;
     }
 }

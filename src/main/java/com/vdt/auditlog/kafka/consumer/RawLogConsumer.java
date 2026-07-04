@@ -17,25 +17,21 @@ import com.vdt.auditlog.storage.repository.AuditLogRepository;
 public class RawLogConsumer {
 
     private final NormalizationService normalizationService;
-    private final AuditLogRepository auditLogRepository; // Tiêm repo vào đây
+    private final AuditLogRepository auditLogRepository;
 
     @KafkaListener(topics = "mysql-raw-logs", groupId = "audit-log-normalization-group")
     public void consumeMysqlLogs(@Payload String message, @Header(KafkaHeaders.RECEIVED_KEY) String key) {
-        // 1. Chuẩn hóa log
-        AuditLogEvent unifiedLog = normalizationService.normalizeMysqlLog(message, key);
+        AuditLogEvent unifiedLog = normalizationService.normalizeMysqlLog(key, message);
         
-        // 2. Lưu trực tiếp vào Elasticsearch (At-least-once delivery)
         auditLogRepository.save(unifiedLog);
-        log.info("[Pipeline] Đã thu thập, chuẩn hóa và lưu trữ log MySQL thành công! ID: {}", unifiedLog.getId());
+        log.info("[⚙️ MySQL Pipeline] Chuẩn hóa và lưu trữ thành công! ID: {}, Action: {}", unifiedLog.getId(), unifiedLog.getActionType());
     }
 
     @KafkaListener(topics = "postgres-raw-logs", groupId = "audit-log-normalization-group")
     public void consumePostgresLogs(@Payload String message, @Header(KafkaHeaders.RECEIVED_KEY) String key) {
-        // 1. Chuẩn hóa log
-        AuditLogEvent unifiedLog = normalizationService.normalizePostgresLog(message, key);
+        AuditLogEvent unifiedLog = normalizationService.normalizePostgresLog(key, message);
         
-        // 2. Lưu trực tiếp vào Elasticsearch
         auditLogRepository.save(unifiedLog);
-        log.info("[Pipeline] Đã thu thập, chuẩn hóa và lưu trữ log Postgres thành công! ID: {}", unifiedLog.getId());
+        log.info("[🐘 Postgres Pipeline] Chuẩn hóa và lưu trữ thành công! ID: {}, Action: {}", unifiedLog.getId(), unifiedLog.getActionType());
     }
 }

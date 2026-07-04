@@ -4,11 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
 import java.util.Map;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.DateFormat;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 @Data
 @Builder
@@ -16,28 +19,32 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 @AllArgsConstructor
 @Document(indexName = "audit-logs")
 public class AuditLogEvent {
+    
     @Id
-    private String id;              // Thêm @Id để Spring hiểu đây là khóa chính
+    private String id;              
     
-    @Field(type = FieldType.Long)
-    private Long timestamp;         
+    // 1. Chuyển sang LocalDateTime để hiển thị đúng định dạng ngày tháng cụ thể
+    // 2. Định dạng format trong ES hỗ trợ cả date_hour_minute_second thông thường
+    // 3. @JsonFormat giúp Jackson tự động format chuỗi JSON trả về cho Frontend
+    @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second)
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime timestamp;         
     
-    @Field(type = FieldType.Keyword) // Đổi thành Keyword để map chính xác
+    @Field(type = FieldType.Keyword) 
     private String dbSource;        
     
-    @Field(type = FieldType.Keyword) // QUAN TRỌNG: Giúp câu lệnh .term() so khớp chính xác
+    @Field(type = FieldType.Keyword) 
     private String dbType;          
     
-    @Field(type = FieldType.Text, analyzer = "standard") // Cho phép full-text search lỏng lẻo
+    @Field(type = FieldType.Keyword) 
     private String actor;           
     
-    @Field(type = FieldType.Keyword) // QUAN TRỌNG: Giúp câu lệnh .term() so khớp chính xác
+    @Field(type = FieldType.Keyword) 
     private String actionType;      
     
-    @Field(type = FieldType.Text, analyzer = "standard") // Cho phép full-text search
+    @Field(type = FieldType.Text, analyzer = "standard") 
     private String queryStatement;  
     
-    // Khai báo Object để Elasticsearch có thể bóc tách search xuyên vào bên trong payload
-    @Field(type = FieldType.Object) 
+    @Field(type = FieldType.Flattened) 
     private Map<String, Object> payload; 
 }

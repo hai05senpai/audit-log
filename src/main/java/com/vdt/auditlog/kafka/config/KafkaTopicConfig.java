@@ -12,7 +12,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic mysqlRawLogsTopic() {
         return TopicBuilder.name("mysql-raw-logs")
-                .partitions(3) // Chia partition để có thể scale-out nhiều consumer chạy song song (Yêu cầu phi chức năng 3)
+                .partitions(3) // Chia partition để có thể scale-out nhiều consumer chạy song song
                 .replicas(1)   // Thay đổi tùy theo cụm Kafka thực tế
                 .build();
     }
