@@ -54,20 +54,31 @@ public class AuditLogService {
 
         // Điều kiện 4: Lọc theo khoảng thời gian timestamp
         if (request.getFromTime() != null || request.getToTime() != null) {
-            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
             mustQueries.add(Query.of(q -> q.range(r -> r
                 .date(d -> {
-                    d.field("timestamp"); // Khai báo field phải nằm TRONG khối date()
+                    d.field("timestamp"); // Chỉ định field cần filter
+                    
+                    // Định nghĩa Formatter khớp chính xác 100% với date_hour_minute_second của ES
+                    java.time.format.DateTimeFormatter esFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+                    
                     if (request.getFromTime() != null) {
+                        // Convert từ số Long sang LocalDateTime đúng kiểu của Entity
                         java.time.LocalDateTime fromDateTime = java.time.Instant.ofEpochMilli(request.getFromTime())
                                 .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-                        d.gte(fromDateTime.format(formatter));
+                        
+                        // Trả ra chuỗi chính xác dạng: "2026-04-07T00:00:00"
+                        String fromStr = fromDateTime.format(esFormatter);
+                        d.gte(fromStr);
                     }
+                    
                     if (request.getToTime() != null) {
+                        // Convert từ số Long sang LocalDateTime đúng kiểu của Entity
                         java.time.LocalDateTime toDateTime = java.time.Instant.ofEpochMilli(request.getToTime())
                                 .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-                        d.lte(toDateTime.format(formatter));
+                        
+                        // Trả ra chuỗi chính xác dạng: "2026-04-07T23:59:59"
+                        String toStr = toDateTime.format(esFormatter);
+                        d.lte(toStr);
                     }
                     return d;
                 })

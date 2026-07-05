@@ -41,8 +41,14 @@ export default function LogSearch() {
       if (query) params.append('query', query);
       if (actor) params.append('actor', actor);
       if (actionType) params.append('actionType', actionType);
-      if (startDate) params.append('startDate', startDate);
-      if (endDate) params.append('endDate', endDate);
+      if (startDate) {
+        const fromMillis = new Date(`${startDate}T00:00:00`).getTime();
+        params.append('fromTime', fromMillis.toString());
+      }
+      if (endDate) {
+        const toMillis = new Date(`${endDate}T23:59:59`).getTime();
+        params.append('toTime', toMillis.toString());
+      }
 
       const res = await fetch(`http://localhost:8080/api/v1/logs/search?${params.toString()}`);
       const data = await res.json();
@@ -120,7 +126,7 @@ export default function LogSearch() {
                 <Activity className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="e.g. CREATE, UPDATE, DELETE"
+                  placeholder="e.g. DML, DQL"
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
