@@ -71,4 +71,4 @@ Trước khi chạy Frontend, máy tính của bạn cần cài đặt sẵn:
 
 * **Backend:** Java, Spring Boot, Spring Data JPA, JWT Authentication
 * **Frontend:** ReactJS, Tailwind CSS, TypeScript
-* **DevOps/Database:** Docker, Docker Compose, MongoDB / PostgreSQL
+* **DevOps/Database:** Docker, Docker Compose, Elasticsearch
